@@ -1,0 +1,123 @@
+# CI for the veriflow-ple Agent Harness entry (Kaggle $400K).
+#
+# Runs the PLE submission kit with Docker on GitHub-hosted runners
+# (the $0 route: public repo, 2,000 free min/month). Two stages:
+#   1. `kit check` on a local-run variant of the harness that calls a free
+#      OpenRouter model (google/gemma-4-26b-a4b-it:free — the same model
+#      family as the official google-cloud/gemma-4-26b) via
+#      openai-compatible + model_base_url. The real submission.yaml
+#      (google-cloud/claude-opus-5-5) is untouched; the variant is built
+#      by ci/make-local-variant.py and is never committed.
+#   2. If kit check passes, a 2-task dev subset (checks-graded, no judge)
+#      with the same free model, to prove the harness runs end to end.
+#
+# Secrets (repo settings, never in the repo):
+#   OPENROUTER_API_KEY  free-tier OpenRouter key (model calls)
+#   HF_TOKEN            Hugging Face read token (gated dev-task dataset)
+# A full 29-task dev run is NOT viable here (6h job limit, minutes budget).
+name: kit-check
+
+on:
+  push:
+    paths:
+      - submission.yaml
+      - serve.py
+      - taskbridge.py
+      - requirements.txt
+      - prompts/**
+      - tests/**
+      - ci/**
+      - .github/workflows/kit-check.yml
+  workflow_dispatch:
+    inputs:
+      tasks:
+        description: "Dev task ids, comma-separated (empty = skip dev subset)"
+        required: false
+        default: "wind-diaphragm-shear,frame-extension-method"
+      max_turns:
+        description: "MAX_TURNS for the local-run variant"
+        required: false
+        default: "60"
+
+jobs:
+  kit-check-and-dev:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - name: Free disk space for Docker images
+        run: |
+          df -h
+          sudo rm -rf /usr/share/dotnet /opt/hostedtoolcache /usr/local/share/boost \
+            /opt/ghc /usr/local/lib/android /usr/local/.ghcup 2>/dev/null || true
+          docker system prune -af 2>/dev/null || true
+          df -h
+
+      - name: Check out entry repo
+        uses: actions/checkout@v4
+
+      - name: Check out ple-kit
+        uses: actions/checkout@v4
+        with:
+          repository: google-research/ple
+          ref: 8320f0402fdca9f42476607f72bcfd5271cd50c9
+          path: ple-kit
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install Harbor 0.20.0
+        run: |
+          uv tool install harbor==0.20.0 --with websockets
+          export PATH="$HOME/.local/bin:$PATH"
+          harbor --version
+
+      - name: Check Docker
+        run: docker info && docker --version
+
+      - name: Write local env file (secrets, runner-only)
+        run: |
+          cat > ple-kit/local.env <<'EOF'
+          MODEL_API_KEY=${{ secrets.OPENROUTER_API_KEY }}
+          HF_TOKEN=${{ secrets.HF_TOKEN }}
+          EOF
+          echo "local.env written"
+
+      - name: Build local-run variant
+        run: python3 ci/make-local-variant.py . /tmp/local-harness --max-turns "${{ inputs.max_turns || '60' }}"
+
+      - name: kit check
+        run: |
+          set -o pipefail
+          cd ple-kit
+          uv run python -m kit check /tmp/local-harness --env-file local.env 2>&1 | tee ../kit-check.log
+
+      - name: Disk snapshot before dev subset
+        run: df -h && docker images --format '{{.Repository}}:{{.Tag}} {{.Size}}' | head -20
+
+      - name: Dev subset (2 checks-graded tasks)
+        if: success() && (inputs.tasks != '')
+        run: |
+          set -o pipefail
+          cd ple-kit
+          uv run python eval/run.py /tmp/local-harness --env-file local.env \
+            --tasks "${{ inputs.tasks }}" --trials 1 \
+            --out runs/ci-dev-subset --no-export 2>&1 | tee ../dev-subset.log
+
+      - name: Collect kit logs
+        if: always()
+        run: |
+          mkdir -p ci-logs
+          cp -r ~/.cache/plebench ci-logs/ 2>/dev/null || true
+          ls -la ci-logs/ 2>/dev/null || true
+
+      - name: Upload logs and results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kit-check-logs
+          path: |
+            kit-check.log
+            dev-subset.log
+            ci-logs/
+            ple-kit/runs/ci-dev-subset/
+          if-no-files-found: warn
