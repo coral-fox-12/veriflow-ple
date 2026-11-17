@@ -2,7 +2,7 @@
 """Build a local-run variant of the veriflow-ple harness.
 
 Copies the entry (this repo) to a target directory, swaps `model_api` to a
-free OpenRouter model via `openai-compatible` + `model_base_url`, caps the
+free Gemini model via `openai-compatible` + `model_base_url`, caps the
 turn/output budgets so a free-tier dev run stays bounded, then makes the
 target a git repository of its own (committed) so `kit check`'s files stage
 sees a clean entry root.
@@ -23,8 +23,8 @@ import sys
 
 EXCLUDE = {".git", "__pycache__", ".venv", "runs", ".github", ".pytest_cache"}
 
-MODEL_API = "openai-compatible/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-MODEL_BASE_URL = "https://openrouter.ai/api/v1"
+MODEL_API = "openai-compatible/gemini-3-flash-preview"
+MODEL_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 
 
 def main() -> int:
@@ -49,7 +49,7 @@ def main() -> int:
 
     sub = out / "submission.yaml"
     text = sub.read_text(encoding="utf-8")
-    # Swap the model: google-cloud (eval servers only) -> free OpenRouter model.
+    # Swap the model: google-cloud (eval servers only) -> free Gemini model.
     new, n = re.subn(
         r"^model_api:.*$",
         f"model_api: {MODEL_API}",
@@ -97,7 +97,7 @@ def main() -> int:
         ["git", "config", "user.email", "ci@veriflow-ple.local"],
         ["git", "config", "user.name", "veriflow-ple CI"],
         ["git", "add", "-A"],
-        ["git", "commit", "-q", "-m", "local-run variant (openai-compatible free model)"],
+        ["git", "commit", "-q", "-m", "local-run variant (gemini-3-flash-preview via openai-compatible)"],
     ):
         subprocess.run(cmd, cwd=out, check=True, env=env)
     print("variant ready at", out)

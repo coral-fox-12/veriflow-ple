@@ -3,17 +3,18 @@
 # Runs the PLE submission kit with Docker on GitHub-hosted runners
 # (the $0 route: public repo, 2,000 free min/month). Two stages:
 #   1. `kit check` on a local-run variant of the harness that calls a free
-#      OpenRouter model (nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free —
-#      the Gemma 4 free models are 429 rate-limited upstream since 17/11,
-#      and several other free models were delisted; Nemotron 30B reasoning
-#      responds HTTP 200) via openai-compatible + model_base_url. The real
+#      Gemini model (gemini-3-flash-preview — via the OpenAI-compatible
+#      endpoint https://generativelanguage.googleapis.com/v1beta/openai/)
+#      via openai-compatible + model_base_url. The real
 #      submission.yaml (google-cloud/claude-opus-5-5) is untouched; the
 #      variant is built by ci/make-local-variant.py and is never committed.
+#      (Previously OpenRouter Nemotron 30B reasoning; dropped 17/11 after the
+#      free tier's 50-requests/day cap killed the dev subset mid-run.)
 #   2. If kit check passes, a 2-task dev subset (checks-graded, no judge)
 #      with the same free model, to prove the harness runs end to end.
 #
 # Secrets (repo settings, never in the repo):
-#   OPENROUTER_API_KEY  free-tier OpenRouter key (model calls)
+#   GEMINI_API_KEY      free-tier Gemini key (model calls; key2 — key1 is rate-limited)
 #   HF_TOKEN            Hugging Face read token (gated dev-task dataset)
 # A full 29-task dev run is NOT viable here (6h job limit, minutes budget).
 name: kit-check
@@ -78,7 +79,7 @@ jobs:
       - name: Write local env file (secrets, runner-only)
         run: |
           cat > ple-kit/local.env <<'EOF'
-          MODEL_API_KEY=${{ secrets.OPENROUTER_API_KEY }}
+          MODEL_API_KEY=${{ secrets.GEMINI_API_KEY }}
           HF_TOKEN=${{ secrets.HF_TOKEN }}
           EOF
           echo "local.env written"
