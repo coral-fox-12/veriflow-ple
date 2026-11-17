@@ -23,7 +23,7 @@ import sys
 
 EXCLUDE = {".git", "__pycache__", ".venv", "runs", ".github", ".pytest_cache"}
 
-MODEL_API = "openai-compatible/gemini-3-flash-preview"
+MODEL_API = "openai-compatible/gemini-3.5-flash-lite"
 MODEL_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 
 
@@ -97,7 +97,7 @@ def main() -> int:
         ["git", "config", "user.email", "ci@veriflow-ple.local"],
         ["git", "config", "user.name", "veriflow-ple CI"],
         ["git", "add", "-A"],
-        ["git", "commit", "-q", "-m", "local-run variant (gemini-3-flash-preview via openai-compatible)"],
+        ["git", "commit", "-q", "-m", "local-run variant (gemini-3.5-flash-lite via openai-compatible)"],
     ):
         subprocess.run(cmd, cwd=out, check=True, env=env)
     print("variant ready at", out)
