@@ -23,7 +23,7 @@ import sys
 
 EXCLUDE = {".git", "__pycache__", ".venv", "runs", ".github", ".pytest_cache"}
 
-MODEL_API = "openai-compatible/google/gemma-4-26b-a4b-it:free"
+MODEL_API = "openai-compatible/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
 MODEL_BASE_URL = "https://openrouter.ai/api/v1"
 
 
